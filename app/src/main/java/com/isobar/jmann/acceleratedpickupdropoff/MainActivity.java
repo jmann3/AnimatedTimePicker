@@ -44,7 +44,6 @@ public class MainActivity extends ActionBarActivity {
     private static int mStatusBarHeight;
     private static int mListViewTopHeight;
 
-    private int mLastFirstVisibleItem = 0;
     private int mLastDistanceTopToFirstVisible;
     private int mHeaderFooterHeight;
     private boolean mIsScrollingUp;
@@ -127,28 +126,9 @@ public class MainActivity extends ActionBarActivity {
             @Override
             public void onScrollStateChanged(AbsListView view, int scrollState) {
 
-                // TODO: settup list of views which have been animated
-                //adapter.setAnimate(scrollState = SCROLL_STATE_FLING || scrollState == SCROLL_STATE_TOUCH_SCROLL);
-
-                // determine scroll direction
-//                final int currentFirstVisibleItem = view.getFirstVisiblePosition();
-
                 updateScrollDirection();
 
-                Log.d("Scroll Direction", "scroll direction is " + mIsScrollingUp);
-
-//                Log.d("FirstVisible", "First visible position is " + currentFirstVisibleItem);
-//
-//                if (currentFirstVisibleItem >= mLastFirstVisibleItem)
-//                    mIsScrollingUp = true;
-//                else
-//                    mIsScrollingUp = false;
-
-//                mLastFirstVisibleItem = currentFirstVisibleItem;
-
                 if (scrollState == SCROLL_STATE_IDLE) {
-
-                    // TODO: align row position so centered
 
                     if (mCenterAlignCounter == 1) {
                         mCenterAlignCounter = 0;
