@@ -45,12 +45,14 @@ public class MainActivity extends ActionBarActivity {
     private static int mListViewTopHeight;
 
     private int mLastFirstVisibleItem = 0;
+    private int mLastDistanceTopToFirstVisible;
+    private int mHeaderFooterHeight;
     private boolean mIsScrollingUp;
-    private boolean mIsAligningRow = false;
     private long mPreviousEventTime;  // stop animations when scrolling too fast
     private int mCenterRowPosition = -1;
     private int mRowOffsetAtStart = -1;
     private int mCenterAlignCounter = 0;
+    private double mMaxSpeed = 0;
 
     TextView mCenterRowTime;
 
@@ -81,12 +83,14 @@ public class MainActivity extends ActionBarActivity {
 
                 mRowOffsetAtStart = (distanceCenterToList % mRowHeightPixels);
 
+                mHeaderFooterHeight = mCenterTopHeight - mStatusBarHeight;
+
                 // create header/footer views
                 RelativeLayout topHeader = (RelativeLayout)getLayoutInflater().inflate(R.layout.time_list_header, null);
                 RelativeLayout bottomHeader = (RelativeLayout)getLayoutInflater().inflate(R.layout.time_list_footer, null);
 
                 // set view heights
-                ListView.LayoutParams layoutParams = new ListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, mCenterTopHeight - mStatusBarHeight);
+                ListView.LayoutParams layoutParams = new ListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, mHeaderFooterHeight);
                 topHeader.setLayoutParams(layoutParams);
                 bottomHeader.setLayoutParams(layoutParams);
 
@@ -127,14 +131,20 @@ public class MainActivity extends ActionBarActivity {
                 //adapter.setAnimate(scrollState = SCROLL_STATE_FLING || scrollState == SCROLL_STATE_TOUCH_SCROLL);
 
                 // determine scroll direction
-                final int currentFirstVisibleItem = view.getFirstVisiblePosition();
+//                final int currentFirstVisibleItem = view.getFirstVisiblePosition();
 
-                if (currentFirstVisibleItem >= mLastFirstVisibleItem)
-                    mIsScrollingUp = true;
-                else
-                    mIsScrollingUp = false;
+                updateScrollDirection();
 
-                mLastFirstVisibleItem = currentFirstVisibleItem;
+                Log.d("Scroll Direction", "scroll direction is " + mIsScrollingUp);
+
+//                Log.d("FirstVisible", "First visible position is " + currentFirstVisibleItem);
+//
+//                if (currentFirstVisibleItem >= mLastFirstVisibleItem)
+//                    mIsScrollingUp = true;
+//                else
+//                    mIsScrollingUp = false;
+
+//                mLastFirstVisibleItem = currentFirstVisibleItem;
 
                 if (scrollState == SCROLL_STATE_IDLE) {
 
@@ -146,27 +156,71 @@ public class MainActivity extends ActionBarActivity {
 
                     } else {
 
-                        // check if all of first row is visible
-                        View firstVisibleRow = mListView.getChildAt(0);
-                        View centerRow = mListView.getChildAt(mCenterRowPosition);
+                        if (mMaxSpeed > 70) {
 
-                        // calculate height in window of center row in list
-                        // get coordinates of origin of row
-                        int[] location = new int[2];
-                        centerRow.getLocationOnScreen(location);
+                            // case for medium to rapid scrolling
+                            mListView.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    mListView.smoothScrollToPositionFromTop(mCenterRowPosition + mListView.getFirstVisiblePosition(), mCenterTopHeight - mStatusBarHeight, 100);
+                                }
+                            });
 
-                        int centerDiff = (mCenterTopHeight - location[1]);
+                        } else {
 
-                        Log.d("CenterPosition", "mCenterRowPosition is " + mCenterRowPosition + ", first visible position is " + mListView.getFirstVisiblePosition());
+                            // check if all of first row is visible
+                            View centerRow = mListView.getChildAt(mCenterRowPosition);
 
-                        mListView.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                mListView.smoothScrollToPositionFromTop(mCenterRowPosition + mListView.getFirstVisiblePosition(), mCenterTopHeight - mStatusBarHeight, 100);
+                            //calculate height in window of center row in list
+                            //get coordinates of origin of row
+                            int[] location = new int[2];
+                            centerRow.getLocationOnScreen(location);
+
+                            int centerDiff = mCenterTopHeight - location[1];
+
+                            Log.d("Scrolling Direction", "mIsScrollingUp is " + mIsScrollingUp + ", centerDiff is " + centerDiff + " centerRowPosition is " + mCenterRowPosition);
+
+                            //case for slow scrolling
+                            if (mIsScrollingUp) {
+
+                                if (centerDiff > 0) {
+                                    mListView.post(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            mListView.smoothScrollToPositionFromTop(mCenterRowPosition + mListView.getFirstVisiblePosition() + 1, mCenterTopHeight - mStatusBarHeight, 400);
+                                        }
+                                    });
+                                } else {
+                                    mListView.post(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            mListView.smoothScrollToPositionFromTop(mCenterRowPosition + mListView.getFirstVisiblePosition(), mCenterTopHeight - mStatusBarHeight, 400);
+                                        }
+                                    });
+                                }
+
+                            } else {
+                                if (centerDiff > 0) {
+                                    mListView.post(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            mListView.smoothScrollToPositionFromTop(mCenterRowPosition + mListView.getFirstVisiblePosition(), mCenterTopHeight - mStatusBarHeight, 400);
+                                        }
+                                    });
+                                } else {
+                                    mListView.post(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            mListView.smoothScrollToPositionFromTop(mCenterRowPosition + mListView.getFirstVisiblePosition() - 1, mCenterTopHeight - mStatusBarHeight, 400);
+                                        }
+                                    });
+                                }
                             }
-                        });
+                        }
 
                         mCenterAlignCounter++;
+
+                        mMaxSpeed = 0;
                     }
                 }
             }
@@ -178,9 +232,18 @@ public class MainActivity extends ActionBarActivity {
                 long timeToScrollOneElement = currTime - mPreviousEventTime;
                 double speed = ((double) 1 / timeToScrollOneElement) * 1000;
 
+                if (speed > mMaxSpeed) {
+                    mMaxSpeed = speed;
+                }
+
                 mPreviousEventTime = currTime;
 
+                Log.d("Speed", "speed is " + speed);
+
                 if (speed <=80) {
+
+                    // update scroll direction
+                    updateScrollDirection();
 
                     //for (int i = firstVisibleItem; i < firstVisibleItem + visibleItemCount - 1; i++) {
                     for (int i = 0; i < totalItemCount - 1; i++) {
@@ -238,6 +301,40 @@ public class MainActivity extends ActionBarActivity {
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+
+    private void updateScrollDirection() {
+
+        View child = mListView.getChildAt(0);
+
+        if (child == null)
+            return;
+
+        Rect r = new Rect(0, 0, child.getWidth(), child.getHeight());
+        double height = child.getHeight() * 1.0;
+
+        mListView.getChildVisibleRect(child, r, null);
+
+        final int firstVisibleRowNumber = mListView.getFirstVisiblePosition();
+
+        int distanceTopToFirstVisible;
+        if (firstVisibleRowNumber > 0) {
+            distanceTopToFirstVisible = mHeaderFooterHeight + (firstVisibleRowNumber - 1) * mRowHeightPixels + (mRowHeightPixels - r.height());
+        } else {
+            distanceTopToFirstVisible = mHeaderFooterHeight - r.height();
+        }
+
+        if (Math.abs(distanceTopToFirstVisible - mLastDistanceTopToFirstVisible) < 15) {
+            return;
+        } else {
+            if (distanceTopToFirstVisible >= mLastDistanceTopToFirstVisible)
+                mIsScrollingUp = true;
+            else
+                mIsScrollingUp = false;
+        }
+
+        mLastDistanceTopToFirstVisible = distanceTopToFirstVisible;
     }
 
     /*
