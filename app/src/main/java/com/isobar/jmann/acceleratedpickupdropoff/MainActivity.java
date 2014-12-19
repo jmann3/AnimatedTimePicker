@@ -50,6 +50,7 @@ public class MainActivity extends ActionBarActivity {
     private long mPreviousEventTime;  // stop animations when scrolling too fast
     private int mCenterRowPosition = -1;
     private int mRowOffsetAtStart = -1;
+    private int mCenterAlignCounter = 0;
 
     TextView mCenterRowTime;
 
@@ -66,8 +67,8 @@ public class MainActivity extends ActionBarActivity {
         centerRow.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
             @Override
             public void onGlobalLayout() {
-                // determine statusbar height
 
+                // determine statusbar height
                 mStatusBarHeight = UIUtils.topOffset(MainActivity.this, findViewById(R.id.master_view));
 
                 int[] positionTop = new int[2];
@@ -76,10 +77,23 @@ public class MainActivity extends ActionBarActivity {
                 mCenterTopHeight = positionTop[1];
                 mCenterBottomHeight = mCenterTopHeight + mRowHeightPixels;
 
-                //mCenterTopHeight = centerRow.getTop() - mStatusBarHeight;
-                //mCenterBottomHeight = centerRow.getBottom() - mStatusBarHeight;
+                int distanceCenterToList = (mCenterTopHeight - mListViewTopHeight);
 
-                mRowOffsetAtStart = ((mCenterTopHeight - mListViewTopHeight) % mRowHeightPixels);
+                mRowOffsetAtStart = (distanceCenterToList % mRowHeightPixels);
+
+                // create header/footer views
+                RelativeLayout topHeader = (RelativeLayout)getLayoutInflater().inflate(R.layout.time_list_header, null);
+                RelativeLayout bottomHeader = (RelativeLayout)getLayoutInflater().inflate(R.layout.time_list_footer, null);
+
+                // set view heights
+                ListView.LayoutParams layoutParams = new ListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, mCenterTopHeight - mStatusBarHeight);
+                topHeader.setLayoutParams(layoutParams);
+                bottomHeader.setLayoutParams(layoutParams);
+
+                // add header/footer to list
+                mListView.addHeaderView(topHeader);
+                mListView.addFooterView(bottomHeader);
+
 
                 centerRow.getViewTreeObserver().removeOnGlobalLayoutListener(this);
             }
@@ -126,44 +140,34 @@ public class MainActivity extends ActionBarActivity {
 
                     // TODO: align row position so centered
 
-                    // check if all of first row is visible
-                    View firstVisibleRow = mListView.getChildAt(0);
-                    View centerRow = mListView.getChildAt(mCenterRowPosition);
+                    if (mCenterAlignCounter == 1) {
+                        mCenterAlignCounter = 0;
+                        return;
 
-                    Rect r = new Rect(0, 0, centerRow.getWidth(), centerRow.getHeight());
+                    } else {
 
-                    // get the visible portion of the first row
-                    view.getChildVisibleRect(firstVisibleRow, r, null);
+                        // check if all of first row is visible
+                        View firstVisibleRow = mListView.getChildAt(0);
+                        View centerRow = mListView.getChildAt(mCenterRowPosition);
 
-                    Log.d("Visible1 ", firstVisibleRow + "  " + mRowHeightPixels + "  " + r.height());
+                        // calculate height in window of center row in list
+                        // get coordinates of origin of row
+                        int[] location = new int[2];
+                        centerRow.getLocationOnScreen(location);
 
+                        int centerDiff = (mCenterTopHeight - location[1]);
 
-//                    if (mIsScrollingUp == true) {
-//                        if (r.height() < mRowOffsetAtStart) {
-//                            mListView.post(new Runnable() {
-//                                @Override
-//                                public void run() {
-//                                    mListView.smoothScrollToPositionFromTop(currentFirstVisibleItem - 1, mRowHeightPixels - mRowOffsetAtStart, 30);
-//                                }
-//                            });
-//                        } else {
-//                            mListView.post(new Runnable() {
-//                                @Override
-//                                public void run() {
-//                                    mListView.smoothScrollToPositionFromTop(currentFirstVisibleItem, mRowHeightPixels - mRowOffsetAtStart, 30);
-//                                }
-//                            });
-//                        }
-//                    } else {
-//                        mListView.post(new Runnable() {
-//                            @Override
-//                            public void run() {
-//                                mListView.smoothScrollToPositionFromTop(currentFirstVisibleItem, mRowOffsetAtStart, 30);
-//                            }
-//                        });
-//                    }
+                        Log.d("CenterPosition", "mCenterRowPosition is " + mCenterRowPosition + ", first visible position is " + mListView.getFirstVisiblePosition());
 
+                        mListView.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                mListView.smoothScrollToPositionFromTop(mCenterRowPosition + mListView.getFirstVisiblePosition(), mCenterTopHeight - mStatusBarHeight, 100);
+                            }
+                        });
 
+                        mCenterAlignCounter++;
+                    }
                 }
             }
 
@@ -287,6 +291,12 @@ public class MainActivity extends ActionBarActivity {
             }
 
             viewHolder.mTime.setText((String) getItem(position));
+
+            viewHolder.mCircleImage.setScaleX(1.0f);
+            viewHolder.mCircleImage.setScaleY(1.0f);
+            GradientDrawable bgShape = (GradientDrawable) viewHolder.mCircleImage.getBackground();
+
+            bgShape.setColor(getResources().getColor(R.color.medium_gray));
 
             // tag the view with a position that can be used to retrieve time for the center row
             viewHolder.arrayPosition = position;
