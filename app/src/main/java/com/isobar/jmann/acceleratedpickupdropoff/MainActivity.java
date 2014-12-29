@@ -6,6 +6,7 @@ import android.animation.PropertyValuesHolder;
 import android.content.Context;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.support.v4.view.ViewCompat;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
@@ -97,6 +98,8 @@ public class MainActivity extends ActionBarActivity {
                 mListView.addHeaderView(topHeader);
                 mListView.addFooterView(bottomHeader);
 
+                mListView.setAdapter(mArrayAdapter);
+
 
                 centerRow.getViewTreeObserver().removeOnGlobalLayoutListener(this);
             }
@@ -107,7 +110,7 @@ public class MainActivity extends ActionBarActivity {
 
         mListView = (ListView) findViewById(R.id.listView);
         mArrayAdapter = new AvailableTimesAdapter(this, R.layout.time_list_row, mAavailableTimes);
-        mListView.setAdapter(mArrayAdapter);
+
 
         mListView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
             @Override
@@ -126,9 +129,13 @@ public class MainActivity extends ActionBarActivity {
             @Override
             public void onScrollStateChanged(AbsListView view, int scrollState) {
 
-                updateScrollDirection();
+                if (scrollState == SCROLL_STATE_FLING || scrollState == SCROLL_STATE_TOUCH_SCROLL) {
+                    mMaxSpeed = 0;
+                }
 
                 if (scrollState == SCROLL_STATE_IDLE) {
+
+                    //Log.d("Scroll Stopped", "STOP!!!!");
 
                     if (mCenterAlignCounter == 1) {
                         mCenterAlignCounter = 0;
@@ -136,7 +143,7 @@ public class MainActivity extends ActionBarActivity {
 
                     } else {
 
-                        if (mMaxSpeed > 70) {
+                        if (mMaxSpeed > 20) {
 
                             // case for medium to rapid scrolling
                             mListView.post(new Runnable() {
@@ -157,8 +164,6 @@ public class MainActivity extends ActionBarActivity {
                             centerRow.getLocationOnScreen(location);
 
                             int centerDiff = mCenterTopHeight - location[1];
-
-                            Log.d("Scrolling Direction", "mIsScrollingUp is " + mIsScrollingUp + ", centerDiff is " + centerDiff + " centerRowPosition is " + mCenterRowPosition);
 
                             //case for slow scrolling
                             if (mIsScrollingUp) {
@@ -199,8 +204,6 @@ public class MainActivity extends ActionBarActivity {
                         }
 
                         mCenterAlignCounter++;
-
-                        mMaxSpeed = 0;
                     }
                 }
             }
@@ -208,51 +211,51 @@ public class MainActivity extends ActionBarActivity {
             @Override
             public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
 
+                int distanceTopToFirstVisible = listviewTopToFirstVisible();
+                int distanceTravelled = Math.abs(mLastDistanceTopToFirstVisible - distanceTopToFirstVisible);
                 long currTime = System.currentTimeMillis();
                 long timeToScrollOneElement = currTime - mPreviousEventTime;
-                double speed = ((double) 1 / timeToScrollOneElement) * 1000;
+                double speed = ((double) distanceTravelled / timeToScrollOneElement) * 10 /** 1000 */;
 
                 if (speed > mMaxSpeed) {
                     mMaxSpeed = speed;
                 }
 
+                //Log.d("Speed", "speed is " + (int)speed + ", maxSpeed is " + (int)mMaxSpeed);
+
+
                 mPreviousEventTime = currTime;
 
-                Log.d("Speed", "speed is " + speed);
 
-                if (speed <=80) {
+                // update scroll direction
+                updateScrollDirection(distanceTopToFirstVisible);
 
-                    // update scroll direction
-                    updateScrollDirection();
+                for (int i = 0; i < totalItemCount - 1; i++) {
 
-                    //for (int i = firstVisibleItem; i < firstVisibleItem + visibleItemCount - 1; i++) {
-                    for (int i = 0; i < totalItemCount - 1; i++) {
+                    // get each visible row
+                    View rowView = mListView.getChildAt(i);
 
-                        // get each visible row
-                        View rowView = mListView.getChildAt(i);
+                    if (rowView != null && mCenterTopHeight != -1 && mCenterBottomHeight != -1) {
 
-                        if (rowView != null && mCenterTopHeight != -1 && mCenterBottomHeight != -1) {
+                        // get coordinates of origin of row
+                        int[] location = new int[2];
+                        rowView.getLocationOnScreen(location);
 
-                            // get coordinates of origin of row
-                            int[] location = new int[2];
-                            rowView.getLocationOnScreen(location);
+                        // determine if row overlaps center
+                        int rowCenterY = (int) (location[1] + (mRowHeightPixels / 2));
 
-                            // determine if row overlaps center
-                            int rowCenterY = (int) (location[1] + (mRowHeightPixels / 2));
+                        //  look for center row
+                        if (rowCenterY < mCenterBottomHeight && rowCenterY > mCenterTopHeight) {
 
-                            //  look for center row
-                            if (rowCenterY < mCenterBottomHeight && rowCenterY > mCenterTopHeight) {
+                            mCenterRowPosition = i;
 
-                                mCenterRowPosition = i;
+                            // expand rowView icon and restore prior icons
+                            mArrayAdapter.expandAndRestore(rowView, speed);
 
-                                // expand rowView icon and restore prior icons
-                                mArrayAdapter.expandAndRestore(rowView, speed);
+                            // set time for center row
+                            mCenterRowTime.setText(mAavailableTimes[((ViewHolder) rowView.getTag()).arrayPosition]);
 
-                                // set time for center row
-                                mCenterRowTime.setText(mAavailableTimes[((ViewHolder) rowView.getTag()).arrayPosition]);
-
-                                break;
-                            }
+                            break;
                         }
                     }
                 }
@@ -283,29 +286,31 @@ public class MainActivity extends ActionBarActivity {
         return super.onOptionsItemSelected(item);
     }
 
-
-    private void updateScrollDirection() {
+    private int listviewTopToFirstVisible() {
 
         View child = mListView.getChildAt(0);
 
         if (child == null)
-            return;
+            return 0;
 
         Rect r = new Rect(0, 0, child.getWidth(), child.getHeight());
-        double height = child.getHeight() * 1.0;
+        //double height = child.getHeight() * 1.0;
 
         mListView.getChildVisibleRect(child, r, null);
 
         final int firstVisibleRowNumber = mListView.getFirstVisiblePosition();
 
-        int distanceTopToFirstVisible;
         if (firstVisibleRowNumber > 0) {
-            distanceTopToFirstVisible = mHeaderFooterHeight + (firstVisibleRowNumber - 1) * mRowHeightPixels + (mRowHeightPixels - r.height());
+            return mHeaderFooterHeight + (firstVisibleRowNumber - 1) * mRowHeightPixels + (mRowHeightPixels - r.height());
         } else {
-            distanceTopToFirstVisible = mHeaderFooterHeight - r.height();
+            return mHeaderFooterHeight - r.height();
         }
+    }
 
-        if (Math.abs(distanceTopToFirstVisible - mLastDistanceTopToFirstVisible) < 15) {
+
+    private void updateScrollDirection(int distanceTopToFirstVisible) {
+
+        if (Math.abs(distanceTopToFirstVisible - mLastDistanceTopToFirstVisible) < 10) {
             return;
         } else {
             if (distanceTopToFirstVisible >= mLastDistanceTopToFirstVisible)
@@ -392,7 +397,7 @@ public class MainActivity extends ActionBarActivity {
 
                 bgShape.setColor(getResources().getColor(R.color.enterprise_green));
 
-                if (speed < 30) {
+                if (speed < 15  && Build.VERSION.SDK_INT > 17) {
                     circleView.animate()
                             .withLayer()
                             .scaleX(2.0f)
